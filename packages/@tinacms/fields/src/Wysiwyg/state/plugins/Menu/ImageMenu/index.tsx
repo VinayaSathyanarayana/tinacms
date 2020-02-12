@@ -37,28 +37,20 @@ export default (props: FloatingImageMenu) => {
   const { node, pos } = selectedImage
   const [title, setTitle] = useState(node.attrs.title)
   const [alt, setAlt] = useState(node.attrs.alt)
+  const [linkTitle, setLinkTitle] = useState()
+  const [linkSrc, setLinkSrc] = useState()
   const { top, left } = view.coordsAtPos(pos)
   const [modalTop, setModalTop] = useState(top)
   const [modalLeft, setModalLeft] = useState(left)
-  const wrapperRef = useRef() as React.MutableRefObject<HTMLElement>
   const imageRef = useRef() as React.MutableRefObject<HTMLImageElement>
+  const [linked, toggleLinked] = useState(false)
 
   function positionImage(scroll?: boolean) {
     const image = document.getElementsByClassName('tina-selected-image')[0]
-    if (image && (imageRef.current !== image || scroll) && wrapperRef.current) {
+    if (image && (imageRef.current !== image || scroll)) {
       imageRef.current = image as any
-      const imageDimensions = image.getBoundingClientRect()
-      const wrapperDimensions = wrapperRef.current.getBoundingClientRect()
-      setModalLeft(
-        imageDimensions.width / 2 +
-          findElementOffsetLeft(image as HTMLElement) -
-          wrapperDimensions.width / 2
-      )
-      setModalTop(
-        imageDimensions.height +
-          findElementOffsetTop(image as HTMLElement) -
-          wrapperDimensions.height
-      )
+      setModalLeft(findElementOffsetLeft(image.parentElement as HTMLElement))
+      setModalTop(findElementOffsetTop(image.parentElement as HTMLElement))
     }
   }
 
@@ -74,16 +66,19 @@ export default (props: FloatingImageMenu) => {
   const updateNodeAttrs = () => {
     const { dispatch, state } = view
     const { image } = state.schema.nodes
+    const { link } = state.schema.marks
     const { tr } = state
-    dispatch(
-      tr
-        .setNodeMarkup(pos, image, {
-          ...node.attrs,
-          alt,
-          title,
-        })
-        .setSelection(new NodeSelection(tr.doc.resolve(pos)))
-    )
+    if (linked) {
+      tr.addMark(pos, pos + 1, link.create({ href: linkSrc, title: linkTitle }))
+    } else {
+      tr.removeMark(pos, pos + 1, link)
+    }
+    tr.setNodeMarkup(pos, image, {
+      ...node.attrs,
+      alt,
+      title,
+    }).setSelection(new NodeSelection(tr.doc.resolve(pos)))
+    dispatch(tr)
     view.focus()
   }
 
@@ -94,7 +89,7 @@ export default (props: FloatingImageMenu) => {
 
   return (
     <TinaReset>
-      <LinkPopup top={modalTop} left={modalLeft} ref={wrapperRef}>
+      <LinkPopup top={modalTop} left={modalLeft}>
         <LinkLabel>Title</LinkLabel>
         <LinkInput
           placeholder="Enter Title"
@@ -104,12 +99,43 @@ export default (props: FloatingImageMenu) => {
         />
         <LinkLabel>Alt</LinkLabel>
         <LinkInput
-          placeholder="Enter URL"
+          placeholder="Enter Alt Text"
           autoFocus
           type={'text'}
           value={alt}
           onChange={evt => setAlt(evt.target.value)}
         />
+        <input
+          type="checkbox"
+          checked={linked}
+          onChange={() => {
+            toggleLinked(!linked)
+            if (!linked) {
+              setLinkTitle('')
+              setLinkSrc('')
+            }
+          }}
+        />
+        Linked
+        {linked && (
+          <>
+            <LinkLabel>Link Title</LinkLabel>
+            <LinkInput
+              placeholder="Enter Link Title"
+              autoFocus
+              type={'text'}
+              value={linkTitle}
+              onChange={evt => setLinkTitle(evt.target.value)}
+            />
+            <LinkLabel>Link URL</LinkLabel>
+            <LinkInput
+              placeholder="Enter Link URL"
+              type={'text'}
+              value={linkSrc}
+              onChange={evt => setLinkSrc(evt.target.value)}
+            />
+          </>
+        )}
         <LinkActions>
           <CancelLink onClick={closeImageSettings}>Cancel</CancelLink>
           <SaveLink onClick={updateNodeAttrs}>Save</SaveLink>
@@ -119,13 +145,10 @@ export default (props: FloatingImageMenu) => {
   )
 }
 
-const LinkPopup = styled.span<
-  React.HTMLAttributes<HTMLDivElement> & {
-    left: number
-    top: number
-    ref: React.MutableRefObject<HTMLElement>
-  }
->`
+const LinkPopup = styled.span<{
+  left: number
+  top: number
+}>`
   background-color: #f6f6f9;
   position: absolute;
   height: max-content;
